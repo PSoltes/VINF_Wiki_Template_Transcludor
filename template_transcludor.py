@@ -26,6 +26,7 @@ class TemplateTranscludor:
         name = template_with_redirect.split(' ', 1)[1]
         name = name.strip()
         name = name[2:-2]
+        name = name.split(':', 1)[1]
         name = name.replace('_', ' ')
         return name
 
@@ -38,8 +39,6 @@ class TemplateTranscludor:
             redirect = regex.search(r'(?=(?:\#redirect|\#REDIRECT)).*', template)
             if redirect is not None:
                 new_template_name = self.get_redirect_name(template)
-                print(template)
-                print(new_template_name)
                 templates = self.find_template_definitions(new_template_name)
         return templates
         
@@ -94,6 +93,7 @@ class TemplateTranscludor:
 
 
 temp_trans = TemplateTranscludor()
+print(temp_trans.find_template_definitions('Daring class destroyer (1949)'))
 # with open('enwiki-20200920-pages-articles-multistream5.xml-p558392p958045', 'rt', encoding='utf-8') as file:
 #     for event, elem in ElementTree.iterparse(file):
 #         _, _, tag = elem.tag.rpartition('}')
