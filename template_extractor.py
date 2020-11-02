@@ -23,6 +23,7 @@ with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-
                 content = elem.findtext(
                     '{http://www.mediawiki.org/xml/export-0.10/}revision/{http://www.mediawiki.org/xml/export-0.10/}text')
                 content = re.sub(r'<noinclude>(?:(?!<\/noinclude>).)*<\/noinclude>', '', content, flags=re.DOTALL + re.MULTILINE)
+                content = re.sub(r'<!--(?:(?!-->).)*-->', '', content, flags=re.DOTALL + re.MULTILINE)
                 content = content.rstrip('\r\n')
                 content += '\n'
                 parsed_templates.append({
