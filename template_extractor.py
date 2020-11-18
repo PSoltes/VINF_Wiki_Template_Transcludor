@@ -39,11 +39,15 @@ class TemplateExtractor:
             os.remove(f)
 
     def normalize_redirect_name(self, template_with_redirect):
-        name = template_with_redirect.split(' ', 1)[1]
-        name = name.strip(' _')
-        name = name[2:-2]
-        name = name.split(':', 1)[1]
-        name = re.sub(r'[\s_]', ' ', name)
+        try:
+            name = re.sub(r'\#redirect|\#REDIRECT', '', template_with_redirect)
+            name = name.strip(' _')
+            name = name[2:-2]
+            name = name.split(':', 1)
+            name = name[1] if len(name) > 1 else name[0]
+            name = re.sub(r'[\s_]', ' ', name)
+        except IndexError:
+            print(template_with_redirect)
         return name
 
     def check_for_redirects(self, text):
@@ -58,7 +62,7 @@ class TemplateExtractor:
         redirect = self.check_for_redirects(text)
         if redirect is not None:
             if title in self.redirects_lookup_table:
-                print('Warning! Rewriting redirect entry')
+                print(f'Warning! Rewriting redirect entry with title: {title}')
             self.redirects_lookup_table[title] = redirect
             return
         text = self.remove_comments(text)
@@ -85,18 +89,19 @@ class TemplateExtractor:
                 }
                 lines_counter += len(template['content'].splitlines())
                 if template['title'] not in self.lookup_table:
-                    self.lookup_table[template['title']] = [lookup_table_entry]
+                    self.lookup_table[template['title']] = lookup_table_entry
             self.currently_parsed_templates = []
             self.file_counter += 1
 
     def extract_templates(self):
         with open(self.path_to_source, 'rt', encoding='utf-8') as source_file:
+            self.cleanup_templates_folder()
             for event, elem in ElementTree.iterparse(source_file):
                 _, _, tag = elem.tag.rpartition('}')
                 if tag == 'page':
                     ns = elem.findtext(
                         '{http://www.mediawiki.org/xml/export-0.10/}ns')
-                    if ns == 10:
+                    if ns == '10':
                         title = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}title')
                         content = elem.findtext(
@@ -104,8 +109,8 @@ class TemplateExtractor:
                         self.parse_page(title, content)
                     if len(self.currently_parsed_templates) == 100:
                         self.write_parsed_templates_into_file()
-                if event == 'end':
-                    elem.clear()
+                    if event == 'end':
+                        elem.clear()
         with open(f'{self.path_to_templates_folder}/lookup_table.txt', 'x', encoding='utf-8') as f:
             f.write(json.dumps(self.lookup_table))
         with open(f'{self.path_to_templates_folder}/redirects_table.txt', 'x', encoding='utf-8') as f:
