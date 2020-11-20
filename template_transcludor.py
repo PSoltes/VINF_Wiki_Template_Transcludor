@@ -67,7 +67,10 @@ class ParserFunctions(object):
         self.functions = {
             '#if': self.pf_if,
             '#ifeq': self.pf_ifeq,
+            'uc': self.uc,
             'ucfirst': self.ucfirst,
+            'lc': self.lc,
+            'lcfirst': self.lcfirst
         }
 
     def variable(self, frame):
@@ -75,10 +78,22 @@ class ParserFunctions(object):
             return str(frame[frame['name']])
         except KeyError:   
             return frame['name']
+    
+    def uc(self, string):
+        return string.upper()
 
     def ucfirst(self, string):
         if len(string) > 0:
             return string[0].upper() + string[1:]
+        else:
+            return string
+
+    def lc(self, string):
+        return string.lower()
+
+    def lcfirst(self, string):
+        if len(string) > 0:
+            return string[0].lower() + string[1:]
         else:
             return string
 
