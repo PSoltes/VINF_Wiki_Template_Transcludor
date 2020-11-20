@@ -3,6 +3,7 @@ from xml.etree import ElementTree
 import glob
 import os
 import json
+import wikitextparser as wtp
 
 
 class Singleton(type):
@@ -46,6 +47,7 @@ class Constants(object, metaclass=Singleton):
                 '#lstx',
             ],
             'variables': [
+                'FULLPAGENAME',
                 'PAGENAME',
                 'NAMESPACE',
                 'NAMESPACENUMBER',
@@ -68,13 +70,19 @@ class ParserFunctions(object):
             'ucfirst': self.ucfirst,
         }
 
+    def variable(self, frame):
+        try:
+            return str(frame[frame['name']])
+        except KeyError:   
+            return frame['name']
+
     def ucfirst(self, string):
         if len(string) > 0:
             return string[0].upper() + string[1:]
         else:
             return string
 
-    def pf_if(self, test_value, if_true, if_false):
+    def pf_if(self, test_value, if_true, if_false = ''):
         if test_value == '':
             return if_false
         else:
@@ -103,31 +111,86 @@ class TemplateTranscludor:
         constants = Constants()
         name_vars = []
         result = {
-            'parser_function': False
+            'constant_type': False
         }
 
         stripped_template_call = template_call[2:-2].strip()
         constant_type = constants.is_in_constants(
             stripped_template_call.split(':', 1)[0].strip())
-        if constant_type == 'parser_functions':
+
+        if constant_type:
+            if constant_type == 'parser_functions':
+                result['constant_type'] = 'parser_function'
+            else:
+                result['constant_type'] = 'variable'
             split_pf_call = stripped_template_call.split(':', 1)
             name_vars.append(split_pf_call[0])
-            name_vars.extend(split_pf_call[1].split('|'))
-            result['parser_function'] = True
+            if len(split_pf_call) > 1:
+                name_vars.extend(self.parse_param_list(split_pf_call[1].strip()))
         else:
-            name_vars = stripped_template_call.split('|')
+            name_vars = self.parse_param_list(stripped_template_call)
 
-        result['name'] = self.pf.ucfirst(name_vars[0].strip(
-        )) if constant_type != 'parser_function' else name_vars[0].strip()
+        result['name'] = self.pf.ucfirst(name_vars[0].strip()) if constant_type != 'parser_function' else name_vars[0].strip()
         result['variables'] = {}
         for i, variable in enumerate(name_vars[1:]):
             split_variable = variable.split('=', 1)
-            result['variables'][str(i)] = variable.strip()
             if len(split_variable) > 1:
                 result['variables'][split_variable[0]
                                     ] = split_variable[1].strip()
+            else:
+                result['variables'][str(i + 1)] = variable.strip()
+
 
         return result
+    
+    def parse_param_list(self, paramlist):
+        number_of_square = 0
+        number_of_curly = 0
+        removed_double_curlies = False
+        added_double_curlies = False
+        last_cut = 0
+        result = []
+        i = 0
+        while i < len(paramlist):
+            if i + 1 < len(paramlist) and paramlist[i] == '[' and paramlist[i+1] == '[':
+                number_of_square += 2
+                i += 2
+                continue
+            if i + 1 < len(paramlist) and paramlist[i] == '{' and paramlist[i+1] == '{':
+                number_of_curly += 2
+                i += 2
+                added_double_curlies = True
+                continue
+            elif paramlist[i] == '{' and added_double_curlies:
+                number_of_curly += 1
+                added_double_curlies = False
+            else:
+                added_double_curlies = False
+
+            if i + 1 < len(paramlist) and paramlist[i] == ']' and paramlist[i+1] == ']':
+                number_of_square -= 2
+                i += 2
+                continue
+
+            if i + 1 < len(paramlist) and paramlist[i] == '}' and paramlist[i+1] == '}':
+                number_of_curly = number_of_curly - 2 if number_of_curly - 2 > 0 else 0
+                i += 2
+                removed_double_curlies = True
+                continue
+            elif paramlist[i] == '}' and removed_double_curlies:
+                number_of_curly -= 1
+                removed_double_curlies = False
+            else:
+                removed_double_curlies = False
+            if number_of_curly == 0 and number_of_square == 0 and paramlist[i] == '|':
+                result.append(paramlist[last_cut:i])
+                last_cut = i + 1
+            i+=1
+        result.append(paramlist[last_cut:])
+        return result
+
+            
+
 
     def fetch_template_definition(self, template_name):
         real_template_name = template_name
@@ -185,24 +248,25 @@ class TemplateTranscludor:
         template_call = self.get_template_call_from_text(text)
         while template_call is not None:
             name_vars = self.parse_template_call(template_call.group())
-            if not name_vars['parser_function']:
+            if not name_vars['constant_type']:
                 template_definition = self.fetch_template_definition(
                     name_vars['name'])
             else:
                 template_definition = template_call.group()[2:-2]
+            template_definition = self.place_variables_into_template(template_definition, name_vars['variables']) if template_definition is not None else ''
             text = text[:template_call.start(
-            )] + self.process_text(template_definition, level + 1, name_vars) + text[template_call.end():]
+            )] + self.process_text(template_definition, level + 1, {**frame, **name_vars}) + text[template_call.end():]
             template_call = self.get_template_call_from_text(text)
         if level != 0:
-            if frame['parser_function']:
+            if frame['constant_type'] == 'parser_function':
                 if frame['name'] in self.pf.functions:
+                    name_vars = self.parse_template_call('{{' + text + '}}')
                     try:
-                        text = self.pf.functions[frame['name']](*frame['variables'].values())
+                        text = self.pf.functions[frame['name']](*name_vars['variables'].values())
                     except TypeError:
-                        print(f'Missing argument in function call:{text}')
-
-            else:
-                text = self.place_variables_into_template(text, frame['variables'])
+                        print(f'Too many or too few arguments in function call:{text}')
+            elif frame['constant_type'] == 'variable':
+                text = self.pf.variable(frame)
 
         return text
         
@@ -214,9 +278,16 @@ class TemplateTranscludor:
                     ns = elem.findtext(
                         '{http://www.mediawiki.org/xml/export-0.10/}ns')
                     if ns != '10':
+                        title = elem.findtext(
+                            '{http://www.mediawiki.org/xml/export-0.10/}title')
                         content = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}revision/{http://www.mediawiki.org/xml/export-0.10/}text')
-                        print(self.process_text(content))
+                        print(self.process_text(content, frame={
+                            'NAMESPACENUMBER': ns,
+                            'PAGENAME': title,
+                            'FULLPAGENAME': title,
+                            'NAMESPACE': 'Pending' #map namespace number to namespace
+                        }))
                     if event == 'end':
                         elem.clear()
 
@@ -224,8 +295,7 @@ class TemplateTranscludor:
 
 
 templ_trans = TemplateTranscludor()
-print(templ_trans.process_text('{{actinium|2|+|14}}'))
-
+templ_trans.proces_xml_wiki('./test_file.xml')
 
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
 #     with open('test_file.xml', 'wb') as write_file:
