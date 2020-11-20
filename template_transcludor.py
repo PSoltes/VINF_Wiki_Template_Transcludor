@@ -98,13 +98,15 @@ class TemplateTranscludor:
 
         result['name'] = self.pf.ucfirst(name_vars[0].strip()) if constant_type != 'parser_function' else name_vars[0].strip()
         result['variables'] = {}
-        for i, variable in enumerate(name_vars[1:]):
+        i = 1
+        for variable in name_vars[1:]:
             split_variable = variable.split('=', 1)
             if len(split_variable) > 1:
                 result['variables'][split_variable[0]
                                     ] = split_variable[1].strip()
             else:
-                result['variables'][str(i + 1)] = variable.strip()
+                result['variables'][str(i)] = variable.strip()
+                i += 1
 
 
         return result
