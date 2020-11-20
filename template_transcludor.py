@@ -71,7 +71,39 @@ class TemplateTranscludor:
         self.pf = ParserFunctions()
 
     def get_template_call_from_text(self, text):
-        return regex.search(r'\{\{(?>(?:(?!{{|}})[\S\s])+|(?R))*+\}\}', text, flags=regex.VERSION1 + regex.VERBOSE)
+        return regex.search(r'\{\{(?>(?:(?!{{|}}|}}}|{{{)[\S\s])+|(?R))*+\}\}', text, flags=regex.VERSION1 + regex.VERBOSE)
+
+    def _get_template_call_from_text(self, text):
+        i = 0
+        braces = 0
+        left_pos = None
+        while i < len(text):
+            if i+2 < len(text) and  text[i] == '{' and text[i+1] == '{' and text[i+2] == '{':
+                braces += 3
+                i += 3
+                continue
+            if i+2 < len(text) and  text[i] == '}' and text[i+1] == '}' and text[i+2] == '}':
+                braces = max(braces - 3, 0)
+                i += 3
+                continue
+            if i+1 < len(text) and  text[i] == '{' and text[i+1] == '{':
+                braces += 2
+                if left_pos is None:
+                    left_pos = i
+                i += 2
+                continue
+            if i+1 < len(text) and  text[i] == '}' and text[i+1] == '}':
+                braces = max(braces - 2, 0)
+                if left_pos is not None and braces == 0:
+                    return {
+                        'start': left_pos,
+                        'end': i + 2,
+                        'group': text[left_pos : i + 2]
+                    }
+                i += 2
+                continue
+            i += 1
+        return None
 
     def parse_template_call(self, template_call):
         constants = Constants()
@@ -96,7 +128,7 @@ class TemplateTranscludor:
         else:
             name_vars = self.parse_param_list(stripped_template_call)
 
-        result['name'] = self.pf.ucfirst(name_vars[0].strip()) if constant_type != 'parser_function' else name_vars[0].strip()
+        result['name'] = self.pf.ucfirst(**{'0':name_vars[0].strip()}) if constant_type != 'parser_function' else name_vars[0].strip()
         result['variables'] = {}
         i = 1
         for variable in name_vars[1:]:
@@ -230,7 +262,7 @@ class TemplateTranscludor:
                 if frame['name'] in self.pf.functions:
                     name_vars = self.parse_template_call('{{' + text + '}}')
                     try:
-                        text = self.pf.functions[frame['name']](*name_vars['variables'].values())
+                        text = self.pf.functions[frame['name']](**name_vars['variables'].values())
                     except TypeError:
                         print(f'Too many or too few arguments in function call:{text}')
             elif frame['constant_type'] == 'variable':
@@ -263,7 +295,10 @@ class TemplateTranscludor:
 
 
 templ_trans = TemplateTranscludor()
-templ_trans.proces_xml_wiki('./test_file.xml')
+text = '{{t|{{M}}|e={{{p}}}}} subst text asdasd {{#tag:ref | Marx, Karl (1848)... | name={{{param}}} }}'
+var = templ_trans._get_template_call_from_text(text)
+
+# templ_trans.proces_xml_wiki('./test_file.xml')
 
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
 #     with open('test_file.xml', 'wb') as write_file:
