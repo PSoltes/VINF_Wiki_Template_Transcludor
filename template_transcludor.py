@@ -245,24 +245,23 @@ class TemplateTranscludor:
         return template_definition
 
     def process_text(self, text, level=0, frame = {}):
-        template_call = self.get_template_call_from_text(text)
+        template_call = self._get_template_call_from_text(text)
         while template_call is not None:
-            name_vars = self.parse_template_call(template_call.group())
+            name_vars = self.parse_template_call(template_call['group'])
             if not name_vars['constant_type']:
                 template_definition = self.fetch_template_definition(
                     name_vars['name'])
             else:
-                template_definition = template_call.group()[2:-2]
+                template_definition = template_call['group'][2:-2]
             template_definition = self.place_variables_into_template(template_definition, name_vars['variables']) if template_definition is not None else ''
-            text = text[:template_call.start(
-            )] + self.process_text(template_definition, level + 1, {**frame, **name_vars}) + text[template_call.end():]
-            template_call = self.get_template_call_from_text(text)
+            text = text[:template_call['start']] + self.process_text(template_definition, level + 1, {**frame, **name_vars}) + text[template_call['end']:]
+            template_call = self._get_template_call_from_text(text)
         if level != 0:
             if frame['constant_type'] == 'parser_function':
                 if frame['name'] in self.pf.functions:
                     name_vars = self.parse_template_call('{{' + text + '}}')
                     try:
-                        text = self.pf.functions[frame['name']](**name_vars['variables'].values())
+                        text = self.pf.functions[frame['name']](**name_vars['variables'])
                     except TypeError:
                         print(f'Too many or too few arguments in function call:{text}')
             elif frame['constant_type'] == 'variable':
@@ -295,10 +294,7 @@ class TemplateTranscludor:
 
 
 templ_trans = TemplateTranscludor()
-text = '{{t|{{M}}|e={{{p}}}}} subst text asdasd {{#tag:ref | Marx, Karl (1848)... | name={{{param}}} }}'
-var = templ_trans._get_template_call_from_text(text)
-
-# templ_trans.proces_xml_wiki('./test_file.xml')
+templ_trans.proces_xml_wiki('./test_file.xml')
 
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
 #     with open('test_file.xml', 'wb') as write_file:
