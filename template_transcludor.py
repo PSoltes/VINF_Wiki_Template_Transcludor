@@ -256,7 +256,7 @@ class TemplateTranscludor:
         template_call = self.get_template_call_from_text(text_to_search)
         while template_call is not None:
             name_vars = self.parse_template_call(template_call['group'])
-            expanded_text += text_to_search[:template_call['start']] + self.process_pf(template_call['group'][2:-2], {**frame, **name_vars}, level + 1)
+            expanded_text += text_to_search[:template_call['start']] + str(self.process_pf(template_call['group'][2:-2], {**frame, **name_vars}, level + 1))
             text_to_search = text_to_search[template_call['end']:]
             template_call = self.get_template_call_from_text(text_to_search)
         expanded_text += text_to_search
@@ -326,7 +326,8 @@ class TemplateTranscludor:
 
 templ_trans = TemplateTranscludor()
 # print(templ_trans.process_text('{{#switch: asdf |1=one |2=two|3|4|5=range 3–5}}'))
-templ_trans.proces_xml_wiki('./test_file.xml')
+# templ_trans.proces_xml_wiki('./test_file.xml')
+print(templ_trans.process_pf('{{#expr: 1234.5678 round 2.3 }}', frame={}))
 
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
 #     with open('test_file.xml', 'wb') as write_file:

@@ -1,3 +1,26 @@
+import re
+from math import floor, ceil, sin, cos, tan, acos, asin, atan, log
+
+class Infix(object):
+    #Infix got from Wikiextractor package and http://tomerfiliba.com/blog/Infix-Operators/
+    def __init__(self, function):
+        self.function = function
+
+    def __ror__(self, other):
+        return Infix(lambda x, self=self, other=other: self.function(other, x))
+
+    def __or__(self, other):
+        return self.function(other)
+
+    def __rlshift__(self, other):
+        return Infix(lambda x, self=self, other=other: self.function(other, x))
+
+    def __rshift__(self, other):
+        return self.function(other)
+
+    def __call__(self, value1, value2):
+        return self.function(value1, value2)
+
 class ParserFunctions(object):
 
     def __init__(self):
@@ -10,6 +33,7 @@ class ParserFunctions(object):
             'lcfirst': self.lcfirst,
             '#tag': self.pf_tag,
             '#switch': self.pf_switch,
+            '#expr': self.pf_expr,
         }
 
     def variable(self, frame):
@@ -69,7 +93,29 @@ class ParserFunctions(object):
                 default = split_param[1]
         if default is None:
             default = args[len(args) - 1] if len(args[len(args) - 1].split('=', 1)) == 1 else ''
-        return default        
+        return default
+
+    def pf_expr(self, *args):
+        expr = ''
+        if len(args) > 1:
+            for arg in args:
+                expr += arg
+        else:
+            expr = args[0]
+
+        expr = re.sub(r'=', '==', expr)
+        expr = re.sub(r'\bround\b', '|ROUND|', expr)
+        expr = re.sub('mod', '%', expr)
+        expr = re.sub(r'\bdiv\b', '/', expr)
+        expr = re.sub(r'trunc (\S+)', r'floor(\1)', expr)
+        expr = re.sub(r'ceil ([1-9]+)', r'ceil(\1)', expr)
+        expr = re.sub(r'floor ([1-9]+)', r'ceil(\1)', expr)
+        expr = re.sub(r'ln\((.*)\)', r'log(\1)', expr)
+        return eval(expr)
+       
+
+
+ROUND = Infix(lambda x,y: round(x,floor(y)))
 
 if __name__ == '__main__':
     pf = ParserFunctions()
