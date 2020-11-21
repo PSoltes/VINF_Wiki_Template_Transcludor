@@ -1,0 +1,19 @@
+method(text, level, frame):
+    expanded_text = ''
+    text_to_search = text
+    templ_call = find_templ_call(text_to_search)
+    while templ_call is not None:
+        if templ_call is "proper template":
+            templ_def = find_templ_def(templ_call.name)
+            searched_text = text_to_search[:templ_call['start']] + method(templ_def, level + 1, frame)
+        else:
+            templ_def = templ_call[2:-2]
+            searched_text = text_to_search[:templ_call['start']] + '{{' + method(templ_def, level + 1, frame) + '}}'
+        text_to_search = text_to_search[templ_call['end']:]
+        templ_call = find_templ_call(text_to_search)
+    searched_text += text_to_search
+    if level == 1:
+        if templ_call.name is not cached:
+            cache templ_call.name
+        searched_text.place_variables
+        searched_text.find_and_eval_parser_funcs()

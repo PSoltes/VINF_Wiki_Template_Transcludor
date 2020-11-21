@@ -69,11 +69,9 @@ class TemplateTranscludor:
         with open(f'{templates_source_folder}/redirects_table.txt', 'rt') as file:
             self.redirects_table = json.load(file)
         self.pf = ParserFunctions()
+        self.template_cache = {}
 
     def get_template_call_from_text(self, text):
-        return regex.search(r'\{\{(?>(?:(?!{{|}}|}}}|{{{)[\S\s])+|(?R))*+\}\}', text, flags=regex.VERSION1 + regex.VERBOSE)
-
-    def _get_template_call_from_text(self, text):
         i = 0
         braces = 0
         left_pos = None
@@ -244,30 +242,49 @@ class TemplateTranscludor:
 
         return template_definition
 
-    def process_text(self, text, level=0, frame = {}):
-        template_call = self._get_template_call_from_text(text)
+    def process_pf(self, text, frame, level = 0):
+        template_call = self.get_template_call_from_text(text)
         while template_call is not None:
             name_vars = self.parse_template_call(template_call['group'])
-            if not name_vars['constant_type']:
-                template_definition = self.fetch_template_definition(
-                    name_vars['name'])
-            else:
-                template_definition = template_call['group'][2:-2]
-            template_definition = self.place_variables_into_template(template_definition, name_vars['variables']) if template_definition is not None else ''
-            text = text[:template_call['start']] + self.process_text(template_definition, level + 1, {**frame, **name_vars}) + text[template_call['end']:]
-            template_call = self._get_template_call_from_text(text)
-        if level != 0:
-            if frame['constant_type'] == 'parser_function':
-                if frame['name'] in self.pf.functions:
-                    name_vars = self.parse_template_call('{{' + text + '}}')
-                    try:
-                        text = self.pf.functions[frame['name']](**name_vars['variables'])
-                    except TypeError:
-                        print(f'Too many or too few arguments in function call:{text}')
-            elif frame['constant_type'] == 'variable':
-                text = self.pf.variable(frame)
-
+            text = text[:template_call['start']] + self.process_pf(template_call['group'][2:-2], {**frame, **name_vars}, level + 1) + text[template_call['end']:]
+            template_call = self.get_template_call_from_text(text)
+        if level != 0 and frame['constant_type'] == 'parser_function':
+            if frame['name'] in self.pf.functions:
+                name_vars = self.parse_template_call('{{' + text + '}}')
+                try:
+                    text = self.pf.functions[frame['name']](**name_vars['variables'])
+                except TypeError:
+                    print(f'Too many or too few arguments in function call:{text}')
+        elif level != 0 and frame['constant_type'] == 'variable':
+            text = self.pf.variable(frame)
+        
         return text
+    def process_text(self, text, level = 0, frame = {}):
+        expanded_text = ''
+        text_to_search = text
+        if not 'name' in frame or not frame['name'] in self.template_cache:
+                    template_call = self.get_template_call_from_text(text_to_search)
+                    while template_call is not None:
+                        name_vars = self.parse_template_call(template_call['group'])
+                        if not name_vars['constant_type']:
+                            template_definition = self.fetch_template_definition(name_vars['name'])
+                            expanded_text += text_to_search[:template_call['start']] + self.process_text(template_definition, level + 1, {**frame, **name_vars})
+                        else:
+                            template_definition = template_call['group'][2:-2]
+                            expanded_text += text_to_search[:template_call['start']] + '{{' + self.process_text(template_definition, level + 1, {**frame, **name_vars}) + '}}'
+                        text_to_search = text_to_search[template_call['end']:]
+                        template_call = self.get_template_call_from_text(text_to_search)
+                    expanded_text += text_to_search
+        else:
+            expanded_text = self.template_cache[frame['name']]
+        if level != 0:
+            if not frame['constant_type'] and frame['name'] not in self.template_cache:
+                self.template_cache[frame['name']] = expanded_text
+                expanded_text = self.place_variables_into_template(expanded_text, frame['variables'])
+        else:
+            expanded_text = self.process_pf(expanded_text, frame)
+
+        return expanded_text  
         
     def proces_xml_wiki(self, wiki_xml_path):
         with open(wiki_xml_path, 'rt', encoding='utf-8') as source_file:
@@ -295,6 +312,7 @@ class TemplateTranscludor:
 
 templ_trans = TemplateTranscludor()
 templ_trans.proces_xml_wiki('./test_file.xml')
+print(templ_trans.template_cache.keys())
 
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
 #     with open('test_file.xml', 'wb') as write_file:
