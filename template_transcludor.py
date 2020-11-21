@@ -72,25 +72,31 @@ class TemplateTranscludor:
         self.template_cache = {}
 
     def get_template_call_from_text(self, text):
+        if text == None:
+            return None
         i = 0
         braces = 0
+        added = []
         left_pos = None
         while i < len(text):
             if i+2 < len(text) and  text[i] == '{' and text[i+1] == '{' and text[i+2] == '{':
                 braces += 3
                 i += 3
+                added.append(3)
                 continue
-            if i+2 < len(text) and  text[i] == '}' and text[i+1] == '}' and text[i+2] == '}':
+            if i+2 < len(text) and  text[i] == '}' and text[i+1] == '}' and text[i+2] == '}' and len(added) > 0 and added[-1] == 3:
                 braces = max(braces - 3, 0)
+                added.pop()
                 i += 3
                 continue
             if i+1 < len(text) and  text[i] == '{' and text[i+1] == '{':
                 braces += 2
                 if left_pos is None:
                     left_pos = i
+                added.append(2)
                 i += 2
                 continue
-            if i+1 < len(text) and  text[i] == '}' and text[i+1] == '}':
+            if i+1 < len(text) and  text[i] == '}' and text[i+1] == '}' and len(added) > 0 and added[-1] == 2:
                 braces = max(braces - 2, 0)
                 if left_pos is not None and braces == 0:
                     return {
@@ -98,6 +104,7 @@ class TemplateTranscludor:
                         'end': i + 2,
                         'group': text[left_pos : i + 2]
                     }
+                added.pop()
                 i += 2
                 continue
             i += 1
@@ -244,25 +251,30 @@ class TemplateTranscludor:
         return template_definition
 
     def process_pf(self, text, frame, level = 0):
-        template_call = self.get_template_call_from_text(text)
+        expanded_text = ''
+        text_to_search = text
+        template_call = self.get_template_call_from_text(text_to_search)
         while template_call is not None:
             name_vars = self.parse_template_call(template_call['group'])
-            text = text[:template_call['start']] + self.process_pf(template_call['group'][2:-2], {**frame, **name_vars}, level + 1) + text[template_call['end']:]
-            template_call = self.get_template_call_from_text(text)
+            expanded_text += text_to_search[:template_call['start']] + self.process_pf(template_call['group'][2:-2], {**frame, **name_vars}, level + 1)
+            text_to_search = text_to_search[template_call['end']:]
+            template_call = self.get_template_call_from_text(text_to_search)
+        expanded_text += text_to_search
         if level != 0 and frame['constant_type'] == 'parser_function':
             if frame['name'] in self.pf.functions:
-                name_vars = self.parse_template_call('{{' + text + '}}')
+                name_vars = self.parse_template_call('{{' + expanded_text + '}}')
                 try:
-                    text = self.pf.functions[frame['name']](*name_vars['variables'])
+                    expanded_text = self.pf.functions[frame['name']](*name_vars['variables'])
                 except TypeError:
                     print(f'Too many or too few arguments in function call:{text}')
         elif level != 0 and frame['constant_type'] == 'variable':
-            text = self.pf.variable(frame)
+            expanded_text = self.pf.variable(frame)
         
-        return text
+        return expanded_text
+
     def process_text(self, text, level = 0, frame = {}):
         expanded_text = ''
-        text_to_search = text
+        text_to_search = text if text is not None else ''
         if not 'name' in frame or not frame['name'] in self.template_cache:
                     template_call = self.get_template_call_from_text(text_to_search)
                     while template_call is not None:
@@ -310,7 +322,7 @@ class TemplateTranscludor:
                         elem.clear()
 
 templ_trans = TemplateTranscludor()
-print(templ_trans.process_text('{{Actinium|12|+|44}}'))
+# print(templ_trans.process_text('{{#switch: asdf |1=one |2=two|3|4|5=range 3–5}}'))
 templ_trans.proces_xml_wiki('./test_file.xml')
 
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:

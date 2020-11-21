@@ -9,6 +9,7 @@ class ParserFunctions(object):
             'lc': self.lc,
             'lcfirst': self.lcfirst,
             '#tag': self.pf_tag,
+            '#switch': self.pf_switch,
         }
 
     def variable(self, frame):
@@ -53,9 +54,23 @@ class ParserFunctions(object):
         attrs = ''
         for variable in args[2:]:
                 attrs += f'{variable} '
-        return f"<{args[0]} {attrs}>{args[1]}</{args[0]}>"        
+        return f"<{args[0]} {attrs}>{args[1]}</{args[0]}>"
+
+    def pf_switch(self, *args):
+        value_hit = False
+        default = None
+        for param in args[1:]:
+            split_param = param.split('=', 1)
+            if split_param[0] == args[0]:
+                value_hit = True
+            if value_hit and len(split_param) > 1 and split_param[0] != '#default':
+                return split_param[1]
+            if split_param[0] == '#default' and len(split_param) > 1:
+                default = split_param[1]
+        if default is None:
+            default = args[len(args) - 1] if len(args[len(args) - 1].split('=', 1)) == 1 else ''
+        return default        
 
 if __name__ == '__main__':
     pf = ParserFunctions()
     print(f'This module contains following wiki parser functions: {pf.functions.keys()}')
-    print(pf.pf_tag(*['b', 'Pavol Soltes', 'aria-id="255"', 'name="nasrac"']))
