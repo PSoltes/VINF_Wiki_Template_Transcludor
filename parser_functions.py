@@ -34,6 +34,7 @@ class ParserFunctions(object):
             '#tag': self.pf_tag,
             '#switch': self.pf_switch,
             '#expr': self.pf_expr,
+            '#ifexist': lambda *args: '' #cannot be implemented in this env
         }
 
     def variable(self, frame):
