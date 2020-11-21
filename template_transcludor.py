@@ -102,12 +102,16 @@ class TemplateTranscludor:
                 continue
             i += 1
         return None
+    
+    def parse_pf_call(self, pf_call):
+        pass
 
     def parse_template_call(self, template_call):
         constants = Constants()
         name_vars = []
         result = {
-            'constant_type': False
+            'constant_type': False,
+            'variables': {}
         }
 
         stripped_template_call = template_call[2:-2].strip()
@@ -120,24 +124,21 @@ class TemplateTranscludor:
             else:
                 result['constant_type'] = 'variable'
             split_pf_call = stripped_template_call.split(':', 1)
-            name_vars.append(split_pf_call[0])
+            result['name'] = split_pf_call[0]
             if len(split_pf_call) > 1:
-                name_vars.extend(self.parse_param_list(split_pf_call[1].strip()))
+                result['variables'] = [variable.strip()
+                                   for variable in self.parse_param_list(split_pf_call[1].strip())]
         else:
             name_vars = self.parse_param_list(stripped_template_call)
-
-        result['name'] = self.pf.ucfirst(**{'0':name_vars[0].strip()}) if constant_type != 'parser_function' else name_vars[0].strip()
-        result['variables'] = {}
-        i = 1
-        for variable in name_vars[1:]:
-            split_variable = variable.split('=', 1)
-            if len(split_variable) > 1:
-                result['variables'][split_variable[0]
-                                    ] = split_variable[1].strip()
-            else:
-                result['variables'][str(i)] = variable.strip()
+            result['name'] = self.pf.ucfirst(*[name_vars[0].strip()])
+            i = 1
+            for variable in name_vars[1:]:
+                split_variable = variable.split('=', 1)
+                if len(split_variable) > 1:
+                    result['variables'][split_variable[0]] = split_variable[1].strip()
+                else:
+                    result['variables'][str(i)] = variable.strip()
                 i += 1
-
 
         return result
     
@@ -252,7 +253,7 @@ class TemplateTranscludor:
             if frame['name'] in self.pf.functions:
                 name_vars = self.parse_template_call('{{' + text + '}}')
                 try:
-                    text = self.pf.functions[frame['name']](**name_vars['variables'])
+                    text = self.pf.functions[frame['name']](*name_vars['variables'])
                 except TypeError:
                     print(f'Too many or too few arguments in function call:{text}')
         elif level != 0 and frame['constant_type'] == 'variable':
@@ -278,8 +279,9 @@ class TemplateTranscludor:
         else:
             expanded_text = self.template_cache[frame['name']]
         if level != 0:
-            if not frame['constant_type'] and frame['name'] not in self.template_cache:
-                self.template_cache[frame['name']] = expanded_text
+            if not frame['constant_type']:
+                if frame['name'] not in self.template_cache:
+                    self.template_cache[frame['name']] = expanded_text
                 expanded_text = self.place_variables_into_template(expanded_text, frame['variables'])
         else:
             expanded_text = self.process_pf(expanded_text, frame)
@@ -307,12 +309,9 @@ class TemplateTranscludor:
                     if event == 'end':
                         elem.clear()
 
-    #################################################
-
-
 templ_trans = TemplateTranscludor()
+print(templ_trans.process_text('{{Actinium|12|+|44}}'))
 templ_trans.proces_xml_wiki('./test_file.xml')
-print(templ_trans.template_cache.keys())
 
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
 #     with open('test_file.xml', 'wb') as write_file:
