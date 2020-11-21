@@ -281,7 +281,10 @@ class TemplateTranscludor:
                         name_vars = self.parse_template_call(template_call['group'])
                         if not name_vars['constant_type']:
                             template_definition = self.fetch_template_definition(name_vars['name'])
-                            expanded_text += text_to_search[:template_call['start']] + self.process_text(template_definition, level + 1, {**frame, **name_vars})
+                            if template_definition == None:
+                                expanded_text += text_to_search[:template_call['start']] + template_call['group'][2:-2]
+                            else:
+                                expanded_text += text_to_search[:template_call['start']] + self.process_text(template_definition, level + 1, {**frame, **name_vars})
                         else:
                             template_definition = template_call['group'][2:-2]
                             expanded_text += text_to_search[:template_call['start']] + '{{' + self.process_text(template_definition, level + 1, {**frame, **name_vars}) + '}}'
