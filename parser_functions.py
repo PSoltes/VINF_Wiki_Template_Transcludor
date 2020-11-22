@@ -1,5 +1,6 @@
 import re
 from math import floor, ceil, sin, cos, tan, acos, asin, atan, log
+from dateutil import parser
 
 class Infix(object):
     #Infix got from Wikiextractor package and http://tomerfiliba.com/blog/Infix-Operators/
@@ -36,6 +37,13 @@ class ParserFunctions(object):
             '#expr': self.pf_expr,
             '#ifexist': lambda *args: '', #cannot be implemented in this env
             '#ifexpr': self.pf_ifexpr,
+            'formatnum': self.pf_formatnum,
+            'padleft': self.pf_padleft,
+            'padright': self.pf_padright,
+            '#dateformat': self.pf_dateformat,
+            '#formatdate': self.pf_dateformat,
+            
+
         }
 
     def variable(self, frame):
@@ -124,7 +132,68 @@ class ParserFunctions(object):
         if bool(self.pf_expr(expr)):
             return if_true
         else:
-            return if_false       
+            return if_false
+
+    def pf_formatnum(self, num, *args):
+        result = ''
+        if len(args) > 0 and args[0] == 'R':
+            return num.replace(',', '')
+        else:
+            start = num.find('.') if num.find('.') != -1 else len(num)
+            while start > 0:
+                result = num[start - 3:] + result
+                num = num[:start - 3]
+                start -= 3
+                if start > 0:
+                    result = ',' + result
+            result = num + result
+            return result
+
+    def pf_padleft(self, string_to_pad, pad_number, padder_string = '0', *args):
+        try:
+            padded_length = int(pad_number)
+            if len(string_to_pad) > padded_length:
+                return string_to_pad
+            no_missing_chars = padded_length - len(string_to_pad)
+            padder_string_repetitions = int(no_missing_chars / len(padder_string))
+            padder_string_part = no_missing_chars % len(padder_string)
+            return padder_string * padder_string_repetitions + padder_string[:padder_string_part] + string_to_pad
+
+        except ValueError:
+            return f'<span class="error">Invalid padded length in padleft call: "{pad_number}"</span>'
+    
+
+    def pf_padright(self, string_to_pad, pad_number, padder_string = '0', *args):
+        try:
+            padded_length = int(pad_number)
+            if len(string_to_pad) > padded_length:
+                return string_to_pad
+            no_missing_chars = padded_length - len(string_to_pad)
+            padder_string_repetitions = int(no_missing_chars / len(padder_string))
+            padder_string_part = no_missing_chars % len(padder_string)
+            return string_to_pad + padder_string * padder_string_repetitions + padder_string[:padder_string_part]
+
+        except ValueError:
+            return f'<span class="error">Invalid padded length in padright call: "{pad_number}"</span>'
+
+    def pf_dateformat(self, date_string, format='', *args):
+        try:
+            date = parser.parse(date_string)
+            formats = {
+                'dmy': lambda date: date.strftime('%d %b %Y'),
+                'mdy': lambda date: date.strftime('%B %d, %Y'),
+                'ymd': lambda date: date.strftime('%Y %b %d')
+            }
+            if format in formats:
+                return formats[format](date)
+            else:
+                return date.strftime('%Y-%m-%d')
+        except:
+            return f'<span class="error">Cannot parse date: "{date_string}"</span>'
+
+
+        
+
 
 
 ROUND = Infix(lambda x,y: round(x,floor(y)))
@@ -132,4 +201,4 @@ ROUND = Infix(lambda x,y: round(x,floor(y)))
 if __name__ == '__main__':
     pf = ParserFunctions()
     print(f'This module contains following wiki parser functions: {pf.functions.keys()}')
-    print(pf.pf_ifexpr(*['2 + 1 = 4', 'three', 'wrong']))
+    print(pf.pf_dateformat('25 dec 2009', 'mdy'))

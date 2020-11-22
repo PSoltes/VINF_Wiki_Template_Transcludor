@@ -34,8 +34,11 @@ class TemplateExtractor:
             onlyinclude_text += re.sub(r'<onlyinclude>|</onlyinclude>', '', part)
         return onlyinclude_text if onlyinclude_text != '' else text
 
-    def cleanup_templates_folder(self):
+    def cleanup_folders(self):
         files = glob.glob(self.path_to_templates_folder + '/*')
+        for f in files:
+            os.remove(f)
+        files = glob.glob(self.path_to_modules_folder + '/*')
         for f in files:
             os.remove(f)
 
@@ -96,7 +99,7 @@ class TemplateExtractor:
 
     def extract_templates(self):
         with open(self.path_to_source, 'rt', encoding='utf-8') as source_file:
-            self.cleanup_templates_folder()
+            self.cleanup_folders()
             for event, elem in ElementTree.iterparse(source_file):
                 _, _, tag = elem.tag.rpartition('}')
                 if tag == 'page':
@@ -110,12 +113,16 @@ class TemplateExtractor:
                         self.parse_page(title, content)
                     if len(self.currently_parsed_templates) == 100:
                         self.write_parsed_templates_into_file()
-                    if ns == '828':
-                        try:
-                            with open(f'{self.path_to_modules_folder}/Module:{title}.lua', 'x') as module_file:
-                                module_file.write(content)
-                        except:
-                            print(f'Couldnt save module with name: {title}')
+                    # if ns == '828':
+                    #     title = elem.findtext(
+                    #         '{http://www.mediawiki.org/xml/export-0.10/}title')
+                    #     content = elem.findtext(
+                    #         '{http://www.mediawiki.org/xml/export-0.10/}revision/{http://www.mediawiki.org/xml/export-0.10/}text')
+                    #     try:
+                    #         with open(f'{self.path_to_modules_folder}/{title}.lua', 'x') as module_file:
+                    #             module_file.write(content)
+                    #     except:
+                    #         print(f'Couldnt save module with name: {title}')
                     if event == 'end':
                         elem.clear()
         with open(f'{self.path_to_templates_folder}/lookup_table.txt', 'x', encoding='utf-8') as f:

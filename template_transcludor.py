@@ -327,7 +327,7 @@ class TemplateTranscludor:
 templ_trans = TemplateTranscludor()
 # print(templ_trans.process_text('{{#switch: asdf |1=one |2=two|3|4|5=range 3–5}}'))
 # templ_trans.proces_xml_wiki('./test_file.xml')
-print(templ_trans.process_pf('{{#expr: 2 + 2 = 4}}', frame={}))
+print(templ_trans.fetch_template_definition('element cell'))
 
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
 #     with open('test_file.xml', 'wb') as write_file:
