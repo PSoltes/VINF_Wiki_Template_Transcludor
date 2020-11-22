@@ -34,7 +34,8 @@ class ParserFunctions(object):
             '#tag': self.pf_tag,
             '#switch': self.pf_switch,
             '#expr': self.pf_expr,
-            '#ifexist': lambda *args: '' #cannot be implemented in this env
+            '#ifexist': lambda *args: '', #cannot be implemented in this env
+            '#ifexpr': self.pf_ifexpr,
         }
 
     def variable(self, frame):
@@ -109,11 +110,21 @@ class ParserFunctions(object):
         expr = re.sub('mod', '%', expr)
         expr = re.sub(r'\bdiv\b', '/', expr)
         expr = re.sub(r'trunc (\S+)', r'floor(\1)', expr)
-        expr = re.sub(r'ceil ([1-9]+)', r'ceil(\1)', expr)
-        expr = re.sub(r'floor ([1-9]+)', r'ceil(\1)', expr)
+        expr = re.sub(r'trunc\((.*)\)', r'floor(\1)', expr)
         expr = re.sub(r'ln\((.*)\)', r'log(\1)', expr)
-        return eval(expr)
-       
+        expr = re.sub(r'(floor|ceil|sin|cos|tan|asin|acos|atan|abs) ([1-9.]+)', r'\1(\2)', expr)
+        result = eval(expr)
+        if result == True:
+            return 1
+        elif result == False:
+            return 0
+        return result
+
+    def pf_ifexpr(self, expr, if_true = '', if_false = '', *args):
+        if bool(self.pf_expr(expr)):
+            return if_true
+        else:
+            return if_false       
 
 
 ROUND = Infix(lambda x,y: round(x,floor(y)))
@@ -121,3 +132,4 @@ ROUND = Infix(lambda x,y: round(x,floor(y)))
 if __name__ == '__main__':
     pf = ParserFunctions()
     print(f'This module contains following wiki parser functions: {pf.functions.keys()}')
+    print(pf.pf_ifexpr(*['2 + 1 = 4', 'three', 'wrong']))
