@@ -37,12 +37,14 @@ class ParserFunctions(object):
             '#expr': self.pf_expr,
             '#ifexist': lambda *args: '', #cannot be implemented in this env
             '#ifexpr': self.pf_ifexpr,
+            '#iferror': self.pf_iferror,
             'formatnum': self.pf_formatnum,
             'padleft': self.pf_padleft,
             'padright': self.pf_padright,
             '#dateformat': self.pf_dateformat,
             '#formatdate': self.pf_dateformat,
-            
+            'plural': self.pf_plural,
+
 
         }
 
@@ -106,33 +108,45 @@ class ParserFunctions(object):
         return default
 
     def pf_expr(self, *args):
-        expr = ''
-        if len(args) > 1:
-            for arg in args:
-                expr += arg
-        else:
-            expr = args[0]
+        try:
+            expr = ''
+            if len(args) > 1:
+                for arg in args:
+                    expr += arg
+            else:
+                expr = args[0]
 
-        expr = re.sub(r'=', '==', expr)
-        expr = re.sub(r'\bround\b', '|ROUND|', expr)
-        expr = re.sub('mod', '%', expr)
-        expr = re.sub(r'\bdiv\b', '/', expr)
-        expr = re.sub(r'trunc (\S+)', r'floor(\1)', expr)
-        expr = re.sub(r'trunc\((.*)\)', r'floor(\1)', expr)
-        expr = re.sub(r'ln\((.*)\)', r'log(\1)', expr)
-        expr = re.sub(r'(floor|ceil|sin|cos|tan|asin|acos|atan|abs) ([1-9.]+)', r'\1(\2)', expr)
-        result = eval(expr)
-        if result == True:
-            return 1
-        elif result == False:
-            return 0
-        return result
+            expr = re.sub(r'=', '==', expr)
+            expr = re.sub(r'\bround\b', '|ROUND|', expr)
+            expr = re.sub('mod', '%', expr)
+            expr = re.sub(r'\bdiv\b', '/', expr)
+            expr = re.sub(r'trunc (\S+)', r'floor(\1)', expr)
+            expr = re.sub(r'trunc\((.*)\)', r'floor(\1)', expr)
+            expr = re.sub(r'ln\((.*)\)', r'log(\1)', expr)
+            expr = re.sub(r'(floor|ceil|sin|cos|tan|asin|acos|atan|abs) ([1-9.]+)', r'\1(\2)', expr)
+            result = eval(expr)
+            if result == True:
+                return 1
+            elif result == False:
+                return 0
+            return result
+        except:
+            return f'<span class="error">Error thrown evaluating expression: "{args[0]}"</span>'
+
 
     def pf_ifexpr(self, expr, if_true = '', if_false = '', *args):
         if bool(self.pf_expr(expr)):
             return if_true
         else:
             return if_false
+    
+    def pf_iferror(self, test_string, error = '', correct = None, *args):
+        if 'class="error"' in test_string:
+            return error
+        elif correct is not None:
+            return correct
+        else:
+            return test_string
 
     def pf_formatnum(self, num, *args):
         result = ''
@@ -190,10 +204,12 @@ class ParserFunctions(object):
                 return date.strftime('%Y-%m-%d')
         except:
             return f'<span class="error">Cannot parse date: "{date_string}"</span>'
-
-
-        
-
+    
+    def pf_plural(self, num, sg, pl, *args):
+        if num == '1':
+            return sg
+        else:
+            return pl
 
 
 ROUND = Infix(lambda x,y: round(x,floor(y)))
@@ -201,4 +217,3 @@ ROUND = Infix(lambda x,y: round(x,floor(y)))
 if __name__ == '__main__':
     pf = ParserFunctions()
     print(f'This module contains following wiki parser functions: {pf.functions.keys()}')
-    print(pf.pf_dateformat('25 dec 2009', 'mdy'))
