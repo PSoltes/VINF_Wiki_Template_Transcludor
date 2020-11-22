@@ -8,12 +8,13 @@ import json
 
 class TemplateExtractor:
 
-    def __init__(self, path_to_source, path_to_templates_folder='./templates'):
+    def __init__(self, path_to_source, path_to_templates_folder='./templates', path_to_modules_folder = './modules'):
         self.redirects_lookup_table = {}
         self.lookup_table = {}
         self.currently_parsed_templates = []
         self.path_to_source = path_to_source
         self.path_to_templates_folder = path_to_templates_folder
+        self.path_to_modules_folder = path_to_modules_folder
         self.file_counter = 0
 
     def remove_noinclude(self, text):
@@ -109,6 +110,12 @@ class TemplateExtractor:
                         self.parse_page(title, content)
                     if len(self.currently_parsed_templates) == 100:
                         self.write_parsed_templates_into_file()
+                    if ns == '828':
+                        try:
+                            with open(f'{self.path_to_modules_folder}/Module:{title}.lua', 'x') as module_file:
+                                module_file.write(content)
+                        except:
+                            print(f'Couldnt save module with name: {title}')
                     if event == 'end':
                         elem.clear()
         with open(f'{self.path_to_templates_folder}/lookup_table.txt', 'x', encoding='utf-8') as f:
@@ -118,6 +125,5 @@ class TemplateExtractor:
 
 
 if __name__ == '__main__':
-    templ_extractor = TemplateExtractor(
-        'enwiki-20201001-pages-articles-multistream.xml')
+    templ_extractor = TemplateExtractor('/media/psoltes/Šoltés_Pavol/enwiki-20201020-pages-meta-current.xml/enwiki-20201020-pages-meta-current.xml')
     templ_extractor.extract_templates()
