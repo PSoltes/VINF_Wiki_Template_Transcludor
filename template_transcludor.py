@@ -5,6 +5,7 @@ import os
 import json
 import wikitextparser as wtp
 from parser_functions import ParserFunctions
+from datetime import datetime
 
 
 class Singleton(type):
@@ -64,9 +65,9 @@ class Constants(object, metaclass=Singleton):
 class TemplateTranscludor:
 
     def __init__(self, templates_source_folder='./templates'):
-        with open(f'{templates_source_folder}/lookup_table.txt', 'rt') as file:
+        with open(f'{templates_source_folder}/lookup_table.json', 'rt') as file:
             self.template_lookup_table = json.load(file)
-        with open(f'{templates_source_folder}/redirects_table.txt', 'rt') as file:
+        with open(f'{templates_source_folder}/redirects_table.json', 'rt') as file:
             self.redirects_table = json.load(file)
         self.pf = ParserFunctions()
         self.template_cache = {}
@@ -189,10 +190,10 @@ class TemplateTranscludor:
             else:
                 removed_double_curlies = False
             if number_of_curly == 0 and number_of_square == 0 and paramlist[i] == '|':
-                result.append(paramlist[last_cut:i])
+                result.append(paramlist[last_cut:i].strip(' \r\n\t'))
                 last_cut = i + 1
             i+=1
-        result.append(paramlist[last_cut:])
+        result.append(paramlist[last_cut:].strip(' \r\n\t'))
         return result
 
             
@@ -201,6 +202,8 @@ class TemplateTranscludor:
     def fetch_template_definition(self, template_name):
         real_template_name = template_name
         while real_template_name in self.redirects_table:
+            if real_template_name == self.redirects_table[real_template_name]:
+                break
             real_template_name = self.redirects_table[real_template_name]
         try:
             template_lookup_table_entry = self.template_lookup_table[real_template_name]
@@ -209,11 +212,11 @@ class TemplateTranscludor:
             return None
 
     def find_template_definition_in_file(self, lookup_table_entry):
-        with open(f'templates/{lookup_table_entry[0]["filename"]}', 'rt') as file:
+        with open(f'templates/{lookup_table_entry["filename"]}', 'rt') as file:
             template = ''
             for index, line in enumerate(file):
-                if index >= lookup_table_entry[0]['start']:
-                    if index <= lookup_table_entry[0]['end']:
+                if index >= lookup_table_entry['start']:
+                    if index <= lookup_table_entry['end']:
                         template += line
                     else:
                         break
@@ -273,6 +276,8 @@ class TemplateTranscludor:
         return expanded_text
 
     def process_text(self, text, level = 0, frame = {}):
+        if level > 30:
+            return regex.sub(r'({{|}})', '', text)
         expanded_text = ''
         text_to_search = text if text is not None else ''
         if not 'name' in frame or not frame['name'] in self.template_cache:
@@ -304,30 +309,47 @@ class TemplateTranscludor:
         return expanded_text  
         
     def proces_xml_wiki(self, wiki_xml_path):
+        errors = []
+        i = 0
+        print(datetime.now())
+        result = open('./results.txt', 'x', encoding='utf-8')
         with open(wiki_xml_path, 'rt', encoding='utf-8') as source_file:
             for event, elem in ElementTree.iterparse(source_file):
                 _, _, tag = elem.tag.rpartition('}')
                 if tag == 'page':
+                    i += 1
+                    if i % 500 == 0:
+                        print(f'Processed {i} pages')
                     ns = elem.findtext(
                         '{http://www.mediawiki.org/xml/export-0.10/}ns')
-                    if ns != '10':
+                    if int(ns) < 4 and i > 17000:
                         title = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}title')
                         content = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}revision/{http://www.mediawiki.org/xml/export-0.10/}text')
-                        print(self.process_text(content, frame={
+                        try:
+                            processed_content = self.process_text(content, frame={
                             'NAMESPACENUMBER': ns,
                             'PAGENAME': title,
                             'FULLPAGENAME': title,
                             'NAMESPACE': 'Pending' #map namespace number to namespace
-                        }))
+                            })
+                            result.write(processed_content)
+                        except:
+                            errors.append(content)
+                            print('Mea culpa')
                     if event == 'end':
                         elem.clear()
+        with open('./errors.txt', 'x', encoding='utf-8') as error_log:
+            for error in errors:
+                error_log.write(error)
+        result.close()
+        print(datetime.now())
+
 
 templ_trans = TemplateTranscludor()
 # print(templ_trans.process_text('{{#switch: asdf |1=one |2=two|3|4|5=range 3–5}}'))
-# templ_trans.proces_xml_wiki('./test_file.xml')
-print(templ_trans.process_pf('{{#iferror: {{#expr: . }} | error | correct }}', frame={}))
+templ_trans.proces_xml_wiki('/home/psoltes/Downloads/enwiki-20201020-pages-articles-multistream1.xml-p1p41242')
 # with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
 #     with open('test_file.xml', 'wb') as write_file:
 #         i = 0
