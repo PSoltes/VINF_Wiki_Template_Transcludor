@@ -1,4 +1,4 @@
 *.xml*
 templates
 *.lua
-
+*.txt

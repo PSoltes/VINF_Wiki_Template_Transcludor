@@ -4,11 +4,12 @@ import glob
 import os
 from functools import reduce
 import json
+from datetime import datetime
 
 
 class TemplateExtractor:
 
-    def __init__(self, path_to_source, path_to_templates_folder='./templates', path_to_modules_folder = './modules'):
+    def __init__(self, path_to_source, path_to_templates_folder='./templates', path_to_modules_folder='./modules'):
         self.redirects_lookup_table = {}
         self.lookup_table = {}
         self.currently_parsed_templates = []
@@ -16,6 +17,11 @@ class TemplateExtractor:
         self.path_to_templates_folder = path_to_templates_folder
         self.path_to_modules_folder = path_to_modules_folder
         self.file_counter = 0
+        self.error_log_file = open(
+            './extractor_errors.txt', 'a+', encoding='utf-8')
+
+    def __del__(self):
+        self.error_log_file.close()
 
     def remove_noinclude(self, text):
         return re.sub(r'<noinclude>(?:(?!<\/noinclude>).)*<\/noinclude>', '', text, flags=re.DOTALL + re.MULTILINE)
@@ -38,24 +44,30 @@ class TemplateExtractor:
         files = glob.glob(self.path_to_templates_folder + '/*')
         for f in files:
             os.remove(f)
-        files = glob.glob(self.path_to_modules_folder + '/*')
-        for f in files:
-            os.remove(f)
+        # files = glob.glob(self.path_to_modules_folder + '/*')
+        # for f in files:
+        #     os.remove(f)
 
     def normalize_redirect_name(self, template_with_redirect):
         try:
-            name = re.sub(r'\#redirect|\#REDIRECT', '', template_with_redirect)
+            name = re.sub(r'\#redirect', '#REDIRECT', template_with_redirect, flags=re.IGNORECASE + re.MULTILINE)
+            name = name.split('#REDIRECT', 1)[1]
+            name = name.split(']]')[0]
             name = name.strip(' _')
-            name = name[2:-2]
+            name = name[2:]
             name = name.split(':', 1)
             name = name[1] if len(name) > 1 else name[0]
             name = re.sub(r'[\s_]', ' ', name)
+            name = name.strip()
         except IndexError:
-            print(template_with_redirect)
+            self.error_log_file.write(
+                f'{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}:Error:Normalizing redirect name: {template_with_redirect}')
+            self.error_log_file.write('---LogEntryEnd---')
+            return None
         return name
 
     def check_for_redirects(self, text):
-        redirect = re.search(r'(?=(?:\#redirect|\#REDIRECT)).*', text)
+        redirect = re.search(r'(?=(?:\#redirect)).*', text, flags=re.IGNORECASE + re.MULTILINE)
         if redirect is not None:
             return self.normalize_redirect_name(text)
         else:
@@ -66,7 +78,9 @@ class TemplateExtractor:
         redirect = self.check_for_redirects(text)
         if redirect is not None:
             if title in self.redirects_lookup_table:
-                print(f'Warning! Rewriting redirect entry with title: {title}')
+                self.error_log_file.write(
+                    f'{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}:Warning:Rewriting redirect entry with title: {title}\n Original text: {text}')
+                self.error_log_file.write('---LogEntryEnd---')
             self.redirects_lookup_table[title] = redirect
             return
         text = self.remove_comments(text)
@@ -76,7 +90,7 @@ class TemplateExtractor:
         text = text.rstrip('\r\n')
         text += '\n'
         self.currently_parsed_templates.append({
-            'title': title,
+            'title': title.strip(),
             'content': text
         })
         return
@@ -94,6 +108,10 @@ class TemplateExtractor:
                 lines_counter += len(template['content'].splitlines())
                 if template['title'] not in self.lookup_table:
                     self.lookup_table[template['title']] = lookup_table_entry
+                else:
+                    self.error_log_file.write(
+                        f'{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}:Warning:Duplicate template name: {template["title"]}')
+                    self.error_log_file.write('---LogEntryEnd---')
             self.currently_parsed_templates = []
             self.file_counter += 1
 
@@ -105,13 +123,13 @@ class TemplateExtractor:
                 if tag == 'page':
                     ns = elem.findtext(
                         '{http://www.mediawiki.org/xml/export-0.10/}ns')
+                    title = elem.findtext(
+                        '{http://www.mediawiki.org/xml/export-0.10/}title')
                     if ns == '10':
-                        title = elem.findtext(
-                            '{http://www.mediawiki.org/xml/export-0.10/}title')
                         content = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}revision/{http://www.mediawiki.org/xml/export-0.10/}text')
                         self.parse_page(title, content)
-                    if len(self.currently_parsed_templates) == 100:
+                    if len(self.currently_parsed_templates) > 100:
                         self.write_parsed_templates_into_file()
                     # if ns == '828':
                     #     title = elem.findtext(
@@ -125,12 +143,14 @@ class TemplateExtractor:
                     #         print(f'Couldnt save module with name: {title}')
                     if event == 'end':
                         elem.clear()
-        with open(f'{self.path_to_templates_folder}/lookup_table.txt', 'x', encoding='utf-8') as f:
+            self.write_parsed_templates_into_file()
+        with open(f'{self.path_to_templates_folder}/lookup_table.json', 'x', encoding='utf-8') as f:
             f.write(json.dumps(self.lookup_table))
-        with open(f'{self.path_to_templates_folder}/redirects_table.txt', 'x', encoding='utf-8') as f:
+        with open(f'{self.path_to_templates_folder}/redirects_table.json', 'x', encoding='utf-8') as f:
             f.write(json.dumps(self.redirects_lookup_table))
 
 
 if __name__ == '__main__':
-    templ_extractor = TemplateExtractor('/media/psoltes/Šoltés_Pavol/enwiki-20201020-pages-meta-current.xml/enwiki-20201020-pages-meta-current.xml')
+    templ_extractor = TemplateExtractor(
+        '/media/psoltes/Šoltés_Pavol/enwiki-20201020-pages-meta-current.xml/enwiki-20201020-pages-meta-current.xml')
     templ_extractor.extract_templates()
