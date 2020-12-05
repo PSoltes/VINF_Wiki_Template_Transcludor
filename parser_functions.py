@@ -47,14 +47,18 @@ class ParserFunctions(object):
 
 
         }
-
+    #todo return some sillines on wrong arguments
     def variable(self, frame):
+        if frame['name'] is None:
+            return ''
         try:
             return str(frame[frame['name']])
         except KeyError:   
             return frame['name']
     
     def uc(self, *args):
+        if len(args) < 1:
+            return ''
         return args[0].upper()
 
     def ucfirst(self, *args):
@@ -65,6 +69,8 @@ class ParserFunctions(object):
             return string
 
     def lc(self, *args):
+        if len(args) < 1:
+            return ''
         return args[0].lower()
 
     def lcfirst(self, *args):
@@ -75,24 +81,32 @@ class ParserFunctions(object):
             return string
 
     def pf_if(self, *args):
+        if len(args) < 1:
+            return ''
         if args[0] == '':
             return args[2] if len(args) > 2 else ''
         else:
             return args[1] if len(args) > 1 else ''
 
     def pf_ifeq(self, *args):
+        if len(args) < 2:
+            return ''
         if args[0] == args[1]:
             return args[2] if len(args) > 2 else ''
         else:
             return args[3] if len(args) > 3 else ''
     
     def pf_tag(self, *args):
+        if len(args) < 1:
+            return ''
         attrs = ''
         for variable in args[2:]:
                 attrs += f'{variable} '
         return f"<{args[0]} {attrs}>{args[1]}</{args[0]}>"
 
     def pf_switch(self, *args):
+        if len(args) < 1:
+            return ''
         value_hit = False
         default = None
         for param in args[1:]:
@@ -134,13 +148,13 @@ class ParserFunctions(object):
             return f'<span class="error">Error thrown evaluating expression: "{args[0]}"</span>'
 
 
-    def pf_ifexpr(self, expr, if_true = '', if_false = '', *args):
+    def pf_ifexpr(self, expr=False, if_true = '', if_false = '', *args):
         if bool(self.pf_expr(expr)):
             return if_true
         else:
             return if_false
     
-    def pf_iferror(self, test_string, error = '', correct = None, *args):
+    def pf_iferror(self, test_string='class="error"', error = '', correct = None, *args):
         if 'class="error"' in test_string:
             return error
         elif correct is not None:

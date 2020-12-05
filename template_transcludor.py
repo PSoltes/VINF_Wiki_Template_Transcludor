@@ -227,6 +227,10 @@ class TemplateTranscludor:
         return regex.search(
             r'\{\{\{(?>(?:(?!{{{|}}})[\S\s])+|(?R))*+\}\}\}', text)
 
+    def remove_subst_call_from_template(self, template_call):
+        #everything here is subst cause content isnt dynamically changed
+        return regex.sub(r'(subst:|safesubst:)', '', template_call, flags=regex.IGNORECASE)
+
     def subst_variable_with_value(self, variable_def, variables):
         stripped_variable_def = variable_def[3:-3]
         split_variable_def = stripped_variable_def.strip().split('|', 1)
@@ -242,16 +246,19 @@ class TemplateTranscludor:
         return variables[split_variable_def[0].strip()] if split_variable_def[0].strip() in variables else split_variable_def[0].strip()
 
     def place_variables_into_template(self, template_definition, variables):
+        substituted_template = ''
         variable = self.get_variable_from_text(template_definition)
 
         while variable is not None:
             subst_variable = self.subst_variable_with_value(
                 variable.group(), variables)
-            template_definition = template_definition[:variable.start(
-            )] + str(subst_variable) + template_definition[variable.end():]
+            substituted_template += template_definition[:variable.start(
+            )] + str(subst_variable)
+            template_definition = template_definition[variable.end():]
             variable = self.get_variable_from_text(template_definition)
+        substituted_template += template_definition
 
-        return template_definition
+        return substituted_template
 
     def process_pf(self, text, frame, level = 0):
         expanded_text = ''
@@ -283,6 +290,7 @@ class TemplateTranscludor:
         if not 'name' in frame or not frame['name'] in self.template_cache:
                     template_call = self.get_template_call_from_text(text_to_search)
                     while template_call is not None:
+                        template_call['group'] = self.remove_subst_call_from_template(template_call['group'])
                         name_vars = self.parse_template_call(template_call['group'])
                         if not name_vars['constant_type']:
                             template_definition = self.fetch_template_definition(name_vars['name'])
@@ -322,22 +330,22 @@ class TemplateTranscludor:
                         print(f'Processed {i} pages')
                     ns = elem.findtext(
                         '{http://www.mediawiki.org/xml/export-0.10/}ns')
-                    if int(ns) < 4 and i > 17000:
+                    if int(ns) < 4:
                         title = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}title')
                         content = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}revision/{http://www.mediawiki.org/xml/export-0.10/}text')
-                        try:
-                            processed_content = self.process_text(content, frame={
-                            'NAMESPACENUMBER': ns,
-                            'PAGENAME': title,
-                            'FULLPAGENAME': title,
-                            'NAMESPACE': 'Pending' #map namespace number to namespace
-                            })
-                            result.write(processed_content)
-                        except:
-                            errors.append(content)
-                            print('Mea culpa')
+                        # try:
+                        processed_content = self.process_text(content, frame={
+                        'NAMESPACENUMBER': ns,
+                        'PAGENAME': title,
+                        'FULLPAGENAME': title,
+                        'NAMESPACE': 'Pending' #map namespace number to namespace
+                        })
+                        result.write(processed_content)
+                        # except Exception as e:
+                        #     errors.append(content)
+                        #     print(e)
                     if event == 'end':
                         elem.clear()
         with open('./errors.txt', 'x', encoding='utf-8') as error_log:
