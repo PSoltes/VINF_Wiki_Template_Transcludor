@@ -78,14 +78,12 @@ class TemplateTranscludor:
         with open(f'{templates_source_folder}/redirects_table.json', 'rt') as file:
             self.redirects_table = json.load(file)
         self.pf = ParserFunctions()
+        self.templates_source_folder = templates_source_folder
         self.template_cache = {}
         self.used_templates = {}
         self.invokes = 0
         self.total_pfs = 0
-        self.result_file = open(result_file, 'w')
-    
-    def __del__(self):
-        self.result_file.close()
+        self.result_file = result_file
 
     def get_template_call_from_text(self, text):
         if text == None:
@@ -231,7 +229,7 @@ class TemplateTranscludor:
             return None
 
     def find_template_definition_in_file(self, lookup_table_entry):
-        with open(f'templates/{lookup_table_entry["filename"]}', 'rt') as file:
+        with open(f'{self.templates_source_folder}/{lookup_table_entry["filename"]}', 'rt') as file:
             template = ''
             for index, line in enumerate(file):
                 if index >= lookup_table_entry['start']:
@@ -344,6 +342,7 @@ class TemplateTranscludor:
         try:
             processed_page = self.process_text(text, frame=frame)
             result_file.write(processed_page)
+            result_file.flush()
             stat_array[0] += len(self.used_templates)
             stat_array[1] += sum(x == 0 for x in self.used_templates.values())
             stat_array[2] += self.total_pfs
@@ -359,6 +358,7 @@ class TemplateTranscludor:
         errors = []
         i = 0
         print(datetime.now())
+        result = open(self.result_file, 'a+', encoding='utf-8')
         with open(wiki_xml_path, 'rt', encoding='utf-8') as source_file:
             for event, elem in ElementTree.iterparse(source_file):
                 _, _, tag = elem.tag.rpartition('}')
@@ -388,7 +388,7 @@ class TemplateTranscludor:
                                     'FULLPAGENAME': title,
                                     'NAMESPACE': 'Pending'  # map namespace number to namespace
                                 },
-                                "result_file": self.result_file,
+                                "result_file": result,
                                 "stat_array": stat_array,
                             })
                             page_parse_process.start()
@@ -400,7 +400,8 @@ class TemplateTranscludor:
                             print(e)
                     if event == 'end':
                         elem.clear()
-        with open('./errors.txt', 'x', encoding='utf-8') as error_log:
+        with open('./errors.txt', 'a+', encoding='utf-8') as error_log:
+            error_log.write(str(datetime.now()))
             for error in errors:
                 error_log.write(error)
         # with open('./template_usage.json', 'w', encoding='utf-8') as temp_usage_file:
@@ -412,6 +413,7 @@ class TemplateTranscludor:
             fileee.write(f'Templates requested: {stat_array[0]}\n')
             fileee.write(f'Requested templates not found: {stat_array[1]}\n')
         print(datetime.now())
+        result.close()
 
 
 # templ_trans = TemplateTranscludor()

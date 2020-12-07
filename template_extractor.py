@@ -97,7 +97,7 @@ class TemplateExtractor:
         return
 
     def write_parsed_templates_into_file(self):
-        with open(f'templates/{self.file_counter}.txt', 'x', encoding='utf-8') as file:
+        with open(f'{self.path_to_templates_folder}/{self.file_counter}.txt', 'x', encoding='utf-8') as file:
             lines_counter = 0
             for template in self.currently_parsed_templates:
                 file.write(template['content'])
