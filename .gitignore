@@ -2,3 +2,4 @@
 templates
 *.lua
 *.txt
+*.json

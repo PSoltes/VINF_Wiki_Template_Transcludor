@@ -6,6 +6,14 @@ import json
 import wikitextparser as wtp
 from parser_functions import ParserFunctions
 from datetime import datetime
+from multiprocessing import Process, Array
+import functools
+import sys
+import getopt
+
+used_templates = dict()
+total_pfs = 0
+invokes = 0
 
 
 class Singleton(type):
@@ -64,13 +72,20 @@ class Constants(object, metaclass=Singleton):
 
 class TemplateTranscludor:
 
-    def __init__(self, templates_source_folder='./templates'):
+    def __init__(self, result_file='results.txt', templates_source_folder='./templates'):
         with open(f'{templates_source_folder}/lookup_table.json', 'rt') as file:
             self.template_lookup_table = json.load(file)
         with open(f'{templates_source_folder}/redirects_table.json', 'rt') as file:
             self.redirects_table = json.load(file)
         self.pf = ParserFunctions()
         self.template_cache = {}
+        self.used_templates = {}
+        self.invokes = 0
+        self.total_pfs = 0
+        self.result_file = open(result_file, 'w')
+    
+    def __del__(self):
+        self.result_file.close()
 
     def get_template_call_from_text(self, text):
         if text == None:
@@ -207,8 +222,12 @@ class TemplateTranscludor:
             real_template_name = self.redirects_table[real_template_name]
         try:
             template_lookup_table_entry = self.template_lookup_table[real_template_name]
+            if not template_name in self.used_templates:
+                self.used_templates[template_name] = 1
             return self.find_template_definition_in_file(template_lookup_table_entry)
         except KeyError:
+            if not template_name in self.used_templates:
+                self.used_templates[template_name] = 0
             return None
 
     def find_template_definition_in_file(self, lookup_table_entry):
@@ -261,6 +280,8 @@ class TemplateTranscludor:
         return substituted_template
 
     def process_pf(self, text, frame, level = 0):
+        if level > 25:
+            print(f'Warning exceeding 10th level recursion. Level: {level}')
         expanded_text = ''
         text_to_search = text
         template_call = self.get_template_call_from_text(text_to_search)
@@ -279,11 +300,14 @@ class TemplateTranscludor:
                     print(f'Too many or too few arguments in function call:{text}')
         elif level != 0 and frame['constant_type'] == 'variable':
             expanded_text = self.pf.variable(frame)
-        
+        self.total_pfs += 1
+        if 'name' in frame and frame['name'] == '#invoke':
+            self.invokes += 1
         return expanded_text
 
     def process_text(self, text, level = 0, frame = {}):
-        if level > 30:
+        if level > 15:
+            print(f'Level: {level}')
             return regex.sub(r'({{|}})', '', text)
         expanded_text = ''
         text_to_search = text if text is not None else ''
@@ -314,13 +338,27 @@ class TemplateTranscludor:
         else:
             expanded_text = self.process_pf(expanded_text, frame)
 
-        return expanded_text  
+        return expanded_text
+
+    def page_process(self, text, frame, result_file, stat_array):
+        try:
+            processed_page = self.process_text(text, frame=frame)
+            result_file.write(processed_page)
+            stat_array[0] += len(self.used_templates)
+            stat_array[1] += sum(x == 0 for x in self.used_templates.values())
+            stat_array[2] += self.total_pfs
+            stat_array[3] += self.invokes
+            not_used_temps = functools.reduce(lambda a,b : a + b + '\n' if self.used_templates[b] == 0 else a, self.used_templates.keys(), "")
+            with open('./not_found_templates.txt', 'a') as not_found_temp_file:
+                not_found_temp_file.write(not_used_temps)
+        except Exception as e:
+            print(e)  
         
     def proces_xml_wiki(self, wiki_xml_path):
+        stat_array = Array('i',[0,0,0,0], lock=False)        
         errors = []
         i = 0
         print(datetime.now())
-        result = open('./results.txt', 'x', encoding='utf-8')
         with open(wiki_xml_path, 'rt', encoding='utf-8') as source_file:
             for event, elem in ElementTree.iterparse(source_file):
                 _, _, tag = elem.tag.rpartition('}')
@@ -328,46 +366,74 @@ class TemplateTranscludor:
                     i += 1
                     if i % 500 == 0:
                         print(f'Processed {i} pages')
+                        with open('./numeral_usage.txt', 'w', encoding='utf-8') as fileee:
+                            fileee.write(str(i)+'\n')
+                            fileee.write(f'Total parser functions: {stat_array[2]}\n')
+                            fileee.write(f'Total invokes: {stat_array[3]}\n')
+                            fileee.write(f'Templates requested: {stat_array[0]}\n')
+                            fileee.write(f'Requested templates not found: {stat_array[1]}\n')
                     ns = elem.findtext(
                         '{http://www.mediawiki.org/xml/export-0.10/}ns')
-                    if int(ns) < 4:
+                    if int(ns) < 4 and i != 1922:
                         title = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}title')
                         content = elem.findtext(
                             '{http://www.mediawiki.org/xml/export-0.10/}revision/{http://www.mediawiki.org/xml/export-0.10/}text')
-                        # try:
-                        processed_content = self.process_text(content, frame={
-                        'NAMESPACENUMBER': ns,
-                        'PAGENAME': title,
-                        'FULLPAGENAME': title,
-                        'NAMESPACE': 'Pending' #map namespace number to namespace
-                        })
-                        result.write(processed_content)
-                        # except Exception as e:
-                        #     errors.append(content)
-                        #     print(e)
+                        try:
+                            page_parse_process = Process(target=self.page_process, kwargs={
+                                "text": content,
+                                "frame": {
+                                    'NAMESPACENUMBER': ns,
+                                    'PAGENAME': title,
+                                    'FULLPAGENAME': title,
+                                    'NAMESPACE': 'Pending'  # map namespace number to namespace
+                                },
+                                "result_file": self.result_file,
+                                "stat_array": stat_array,
+                            })
+                            page_parse_process.start()
+                            page_parse_process.join(timeout=600)
+                            page_parse_process.terminate()
+
+                        except Exception as e:
+                            errors.append(content)
+                            print(e)
                     if event == 'end':
                         elem.clear()
         with open('./errors.txt', 'x', encoding='utf-8') as error_log:
             for error in errors:
                 error_log.write(error)
-        result.close()
+        # with open('./template_usage.json', 'w', encoding='utf-8') as temp_usage_file:
+        #     json.dump(used_templates.__dict__, temp_usage_file)
+        with open('./numeral_usage.txt', 'w', encoding='utf-8') as fileee:
+            fileee.write('Full file')
+            fileee.write(f'Total parser functions: {stat_array[2]}\n')
+            fileee.write(f'Total invokes: {stat_array[3]}\n')
+            fileee.write(f'Templates requested: {stat_array[0]}\n')
+            fileee.write(f'Requested templates not found: {stat_array[1]}\n')
         print(datetime.now())
 
 
-templ_trans = TemplateTranscludor()
-# print(templ_trans.process_text('{{#switch: asdf |1=one |2=two|3|4|5=range 3–5}}'))
-templ_trans.proces_xml_wiki('/home/psoltes/Downloads/enwiki-20201020-pages-articles-multistream1.xml-p1p41242')
-# with open('enwiki-20201001-pages-articles-multistream.xml', 'rt', encoding='utf-8') as file:
-#     with open('test_file.xml', 'wb') as write_file:
-#         i = 0
-#         for event, elem in ElementTree.iterparse(file):
-#             _, _, tag = elem.tag.rpartition('}')
-#             if tag == 'page':
-#                 element_string = ElementTree.tostring(elem, encoding='utf-8')
-#                 write_file.write(element_string)
-#                 if event == 'end':
-#                     elem.clear()
-#                 i += 1
-#             if i > 0:
-#                 break
+# templ_trans = TemplateTranscludor()
+# templ_trans.proces_xml_wiki('/home/psoltes/Downloads/enwiki-20201020-pages-articles-multistream1.xml-p1p41242')
+
+if __name__ == '__main__':
+    templates_folder = None
+    output_file = None
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], 'ho:t:', ['output=', 'templ='])
+    except getopt.GetoptError:
+      print ('template_transludor.py -o <outputfile> -t <template_folder> [list of inputs]')
+      sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print ('template_transludor.py -o <outputfile> -t <template_folder> [list of inputs]')
+            sys.exit()
+        elif opt in ['-o', '--output']:
+            output_file = arg
+        elif opt in ['-t', '--templ']:
+            templates_folder = arg
+    
+    templ_trans = TemplateTranscludor(output_file, templates_folder)
+    for arg in args:
+        templ_trans.proces_xml_wiki(arg)
