@@ -5,6 +5,7 @@ import os
 from functools import reduce
 import json
 from datetime import datetime
+import sys, getopt
 
 
 class TemplateExtractor:
@@ -151,6 +152,17 @@ class TemplateExtractor:
 
 
 if __name__ == '__main__':
-    templ_extractor = TemplateExtractor(
-        '/media/psoltes/Šoltés_Pavol/enwiki-20201020-pages-meta-current.xml/enwiki-20201020-pages-meta-current.xml')
+    templates_folder = None
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], 'ht:', ['templ='])
+    except getopt.GetoptError:
+      print ('template_extractor.py -t <template_folder> <input>')
+      sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print ('template_extractor.py -t <template_folder> <input>')
+            sys.exit()
+        elif opt in ['-t', '--templ']:
+            templates_folder = arg
+    templ_extractor = TemplateExtractor(args[0], templates_folder)
     templ_extractor.extract_templates()
